@@ -17,6 +17,7 @@ from .mtoonxt.import_hook import (
     register_external_stencil_import_consumer,
     unregister_external_stencil_import_consumer,
 )
+from .mtoonxt.shadows import set_shadow_adapter
 
 MtoonxtStencilExportProvider = Callable[[Any, dict[str, int]], Sequence[MtoonxtStencil]]
 MtoonxtStencilImportConsumer = Callable[[Any, Sequence[MtoonxtStencil]], None]
@@ -80,6 +81,7 @@ __all__ = [
     "MtoonxtStencilImportConsumer",
     "Vrm1ExportUserExtension",
     "Vrm1ImportUserExtension",
+    "set_shadow_adapter",
     "register_embedded",
     "unregister_embedded",
 ]

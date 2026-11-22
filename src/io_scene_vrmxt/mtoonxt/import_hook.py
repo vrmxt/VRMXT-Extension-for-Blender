@@ -15,6 +15,7 @@ from ..format.mtoonxt import (
 from .property_group import (
     apply_parsed_stencils_to_scene,
 )
+from .shadows import import_shadows
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ def apply_mtoonxt_import(context: Any) -> None:
     if materials_raw is None:
         return
 
+    import_shadows(context)
     index_to_material = getattr(context, "material_index_to_material", {}) or {}
     material_count = len(materials_raw)
 

@@ -54,6 +54,13 @@ else:
     class VrmxtMtoonxtStencilMaterial(PropertyGroup):
         material: PointerProperty(name="Material", type=Material)  # type: ignore[valid-type]
 
+    class VrmxtShadowReceiver(PropertyGroup):
+        receive_others: BoolProperty(
+            name="Receive shadows from other materials", default=True
+        )
+        receive_self: BoolProperty(name="Receive self shadows", default=True)
+        excluded_casters: CollectionProperty(type=VrmxtMtoonxtStencilMaterial)
+
     class VrmxtMtoonxtStencil(PropertyGroup):
         writers: CollectionProperty(  # type: ignore[valid-type]
             type=VrmxtMtoonxtStencilMaterial
@@ -249,6 +256,7 @@ def register() -> bool:
         return False
     classes = (
         VrmxtMtoonxtStencilMaterial,
+        VrmxtShadowReceiver,
         VrmxtMtoonxtStencil,
         VrmxtMtoonxtSceneSettings,
     )
@@ -260,7 +268,12 @@ def register() -> bool:
         bpy.types.Scene.vrmxt_mtoonxt_stencil_settings = PointerProperty(  # type: ignore[attr-defined]
             type=VrmxtMtoonxtSceneSettings
         )
+        bpy.types.Material.vrmxt_shadow_receiver = PointerProperty(
+            type=VrmxtShadowReceiver
+        )
     except Exception:
+        if hasattr(bpy.types.Scene, "vrmxt_mtoonxt_stencil_settings"):
+            del bpy.types.Scene.vrmxt_mtoonxt_stencil_settings
         for cls in reversed(registered):
             with contextlib.suppress(RuntimeError):
                 bpy.utils.unregister_class(cls)
@@ -277,7 +290,9 @@ def unregister() -> None:
         return
     if hasattr(bpy.types.Scene, "vrmxt_mtoonxt_stencil_settings"):
         del bpy.types.Scene.vrmxt_mtoonxt_stencil_settings
+    del bpy.types.Material.vrmxt_shadow_receiver
     for cls in (
+        VrmxtShadowReceiver,
         VrmxtMtoonxtSceneSettings,
         VrmxtMtoonxtStencil,
         VrmxtMtoonxtStencilMaterial,
