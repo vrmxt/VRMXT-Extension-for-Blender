@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from io_scene_vrmxt.materials_override.export_hook import (
-    _remap_texture_properties_for_export,
+    apply_materials_override_export,
 )
 from io_scene_vrmxt.materials_override.import_hook import bind_override_texture_images
 
@@ -54,86 +54,83 @@ class TestBindOverrideTextureImages(unittest.TestCase):
 
 
 class TestRemapTexturePropertiesForExport(unittest.TestCase):
-    def test_packs_image_and_rewrites_index(self) -> None:
-        image = SimpleNamespace(name="VrmxtTestTexture")
-        item = SimpleNamespace(image=image, prop_type="texture", name="_MainTex")
-        slot = SimpleNamespace(properties=[item])
-        settings = SimpleNamespace(authored=True, overrides=[slot])
-        material = SimpleNamespace(
-            name="Hair",
-            vrmxt_materials_override_settings=settings,
-        )
-        override_dict = {
-            "specVersion": "1.0",
-            "overrides": [
-                {
-                    "engine": "unity",
-                    "material": {"idType": "shaderName", "id": "lilToon"},
-                    "properties": [
-                        {"name": "_MainTex", "type": "texture", "texture": 24},
-                        {"name": "_UseGlitter", "type": "scalar", "value": 1.0},
-                    ],
-                }
-            ],
-        }
-        json_dict: dict = {"textures": [], "images": [], "samplers": []}
-        context = SimpleNamespace(
-            json_dict=json_dict,
-            buffer0=bytearray(),
-            image_name_to_index={},
-        )
-
-        with mock.patch(
-            "io_scene_vrmxt.materials_override.export_hook.ensure_vfx_texture_index",
-            return_value=0,
-        ) as ensure:
-            result = _remap_texture_properties_for_export(
-                material, override_dict, context
+    def export(self, properties):
+        def slot(shader, props):
+            return SimpleNamespace(
+                engine="unity",
+                material_id=shader,
+                variant="builtin",
+                id_type="shaderName",
+                properties=props,
             )
 
-        ensure.assert_called_once()
-        props = result["overrides"][0]["properties"]  # type: ignore[index]
-        self.assertEqual(
-            props,
-            [
-                {"name": "_MainTex", "type": "texture", "texture": 0},
-                {"name": "_UseGlitter", "type": "scalar", "value": 1.0},
-            ],
-        )
-
-    def test_drops_stale_texture_without_image(self) -> None:
-        item = SimpleNamespace(image=None, prop_type="texture", name="_MainTex")
-        slot = SimpleNamespace(properties=[item])
-        settings = SimpleNamespace(authored=True, overrides=[slot])
-        material = SimpleNamespace(
-            name="Hair",
-            vrmxt_materials_override_settings=settings,
-        )
-        override_dict = {
-            "specVersion": "1.0",
-            "overrides": [
-                {
-                    "engine": "unity",
-                    "material": {"idType": "shaderName", "id": "lilToon"},
-                    "properties": [
-                        {"name": "_MainTex", "type": "texture", "texture": 24},
-                        {"name": "_Color", "type": "vector", "value": [1, 0, 0, 1]},
+        settings = SimpleNamespace(
+            authored=True,
+            overrides=[
+                slot(
+                    "",
+                    [
+                        SimpleNamespace(
+                            name="_MainTex", prop_type="texture", image=object()
+                        )
                     ],
-                }
+                ),
+                slot("Standard", properties),
             ],
-        }
+        )
+        material = SimpleNamespace(
+            name="Coat", vrmxt_materials_override_settings=settings
+        )
+        base = {"baseColorTexture": {"index": 3, "texCoord": 1}}
+        gltf = {"name": "Coat", "pbrMetallicRoughness": base.copy()}
         context = SimpleNamespace(
-            json_dict={"textures": []},
+            json_dict={"materials": [gltf]},
             buffer0=bytearray(),
             image_name_to_index={},
+            material_name_to_index={"Coat": 0},
+            material_index_to_material={0: material},
         )
+        apply_materials_override_export(context)
+        self.assertEqual(gltf["pbrMetallicRoughness"], base)
+        (entry,) = gltf["extensions"]["VRMXT_materials_override"]["overrides"]
+        return entry["properties"]
 
-        result = _remap_texture_properties_for_export(material, override_dict, context)
-        props = result["overrides"][0]["properties"]  # type: ignore[index]
-        self.assertEqual(
-            props,
-            [{"name": "_Color", "type": "vector", "value": [1, 0, 0, 1]}],
+    @mock.patch(
+        "io_scene_vrmxt.materials_override.export_hook.ensure_vfx_texture_index",
+        return_value=0,
+    )
+    def test_explicit_image_survives_filtered_slots_and_properties(self, pack):
+        image = object()
+        output = self.export(
+            [
+                SimpleNamespace(name="", prop_type="texture", image=object()),
+                SimpleNamespace(name="_Color", prop_type="vector"),
+                SimpleNamespace(
+                    name="_MainTex", prop_type="texture", image=image, texture_index=24
+                ),
+            ]
         )
+        self.assertEqual(
+            output[-1], {"name": "_MainTex", "type": "texture", "texture": 0}
+        )
+        self.assertEqual(len(output), 2)
+        pack.assert_called_once()
+        self.assertIs(pack.call_args.kwargs["image"], image)
+
+    @mock.patch(
+        "io_scene_vrmxt.materials_override.export_hook.ensure_vfx_texture_index"
+    )
+    def test_parameter_only_preserves_original_texture(self, pack):
+        scalar = SimpleNamespace(
+            name="_Glossiness", prop_type="scalar", value_float=0.25
+        )
+        expected = [{"name": "_Glossiness", "type": "scalar", "value": 0.25}]
+        self.assertEqual(self.export([scalar]), expected)
+        stale = SimpleNamespace(
+            name="_MainTex", prop_type="texture", image=None, texture_index=24
+        )
+        self.assertEqual(self.export([stale, scalar]), expected)
+        pack.assert_not_called()
 
 
 if __name__ == "__main__":

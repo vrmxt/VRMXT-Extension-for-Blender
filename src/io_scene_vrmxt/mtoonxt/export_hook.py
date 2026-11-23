@@ -15,6 +15,7 @@ from ..format.mtoonxt import (
     material_has_sibling_mtoon,
     write_stencil,
 )
+from .shadows import export_shadows
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +109,7 @@ def apply_mtoonxt_export(context: Any) -> None:
                 clear_mtoonxt_from_material_dict(material_dict)
 
     write_stencil(json_dict, stencils)
+    export_shadows(context)
 
 
 def on_vrm1_export(context: Any) -> None:

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from typing import Any
 
 from ..common.constants import (
@@ -186,7 +187,9 @@ def populate_groups_from_raw_json(material: Any, raw_json: str) -> bool:
     return True
 
 
-def _property_item_to_format(item: Any) -> MaterialProperty | None:
+def _property_item_to_format(
+    item: Any, resolve_texture: Callable[[Any], int | None] | None = None
+) -> MaterialProperty | None:
     name = (getattr(item, "name", "") or "").strip()
     prop_type = getattr(item, "prop_type", "") or ""
     if not name or not prop_type:
@@ -194,6 +197,13 @@ def _property_item_to_format(item: Any) -> MaterialProperty | None:
     if prop_type == "texture":
         image = getattr(item, "image", None)
         texture_index = int(getattr(item, "texture_index", -1))
+        if resolve_texture is not None:
+            if image is None and texture_index < 0:
+                return None
+            resolved = resolve_texture(item)
+            if resolved is None:
+                return None
+            return MaterialProperty(name=name, type=prop_type, texture=resolved)
         # Image resolution happens at export; store index placeholder for sync.
         if image is not None:
             # Keep prior index if any; export hook remaps.
@@ -229,7 +239,9 @@ def _property_item_to_format(item: Any) -> MaterialProperty | None:
     return None
 
 
-def groups_to_extension(material: Any) -> VrmxtMaterialsOverride | None:
+def groups_to_extension(
+    material: Any, resolve_texture: Callable[[Any], int | None] | None = None
+) -> VrmxtMaterialsOverride | None:
     settings = _settings_of(material)
     if settings is None or not settings.authored:
         return None
@@ -246,7 +258,7 @@ def groups_to_extension(material: Any) -> VrmxtMaterialsOverride | None:
             continue
         properties: list[MaterialProperty] = []
         for item in slot.properties:
-            parsed = _property_item_to_format(item)
+            parsed = _property_item_to_format(item, resolve_texture)
             if parsed is not None:
                 properties.append(parsed)
         overrides.append(
@@ -283,11 +295,13 @@ def sync_raw_json_from_groups(material: Any) -> str | None:
     return serialized
 
 
-def read_extension_dict_for_export(material: Any) -> dict[str, Json] | None:
+def read_extension_dict_for_export(
+    material: Any, resolve_texture: Callable[[Any], int | None] | None = None
+) -> dict[str, Json] | None:
     """Preferred export payload: authored groups, else stored raw_json."""
     settings = _settings_of(material)
     if settings is not None and settings.authored:
-        extension = groups_to_extension(material)
+        extension = groups_to_extension(material, resolve_texture)
         if extension is not None:
             return serialize_materials_override(extension)
         return None

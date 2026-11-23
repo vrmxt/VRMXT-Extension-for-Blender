@@ -46,3 +46,14 @@ is optional and is not an exporter dependency.
 
 The recorded animation uses companion timelines, not VRM animation timing.
 Public review media excludes raw client model/texture assets.
+
+### Material shadow receivers
+
+The optional root `VRMXT_materials_mtoonxt.shadowReceivers` array identifies receivers
+and excluded casters by their glTF material indices. For example,
+`{"receiver":2,"receiveSelf":false,"receiveOthers":true,"excludedCasters":[0]}`
+allows other materials to cast onto material 2 except material 0. Receiving a
+material's own shadows and receiving other materials' shadows are independent.
+Both default to true. An empty exclusion list is the default. Identity follows
+the material even when multiple objects share it. Ordinary materials require no
+record. Rendering support depends on the consuming engine.
